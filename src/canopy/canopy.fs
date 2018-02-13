@@ -14,6 +14,8 @@ open finders
 open System.Drawing
 open System.Drawing.Imaging
 open EditDistance
+open OpenQA.Selenium.Remote
+open System.Reflection
 
 let mutable (failureMessage : string) = null
 let mutable wipTest = false
@@ -836,6 +838,43 @@ let private safariDriverService _ =
     service.HideCommandPromptWindow <- hideCommandPromptWindow
     service
 
+//Patch remotedriver to use 127.0.0.1 instead of localhost to work around https://github.com/dotnet/corefx/issues/24104 and speed up tests on netcore
+let private patchDriverLocalhost (driver: IWebDriver) =
+    let rd = (driver :?> OpenQA.Selenium.Remote.RemoteWebDriver)
+    let ty = typedefof<RemoteWebDriver>;
+    let commandExecutorProperty =  ty.GetProperties(BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.GetProperty) |> Array.find (fun x -> x.Name = "CommandExecutor")
+    let commandExecutor:ICommandExecutor = commandExecutorProperty.GetValue(rd) :?> ICommandExecutor
+
+    let remoteUriFieldFromExecutor (executor:ICommandExecutor) =
+        executor.GetType().GetField("remoteServerUri", BindingFlags.Instance ||| BindingFlags.NonPublic ||| BindingFlags.GetField ||| BindingFlags.SetField)
+
+    let remoteUriField = remoteUriFieldFromExecutor commandExecutor
+    let (executor, uriField) = 
+        if (remoteUriField = null) then
+            let internalExecutorField = commandExecutor.GetType().GetField("internalExecutor", BindingFlags.Instance ||| BindingFlags.NonPublic ||| BindingFlags.GetField)
+            let internalCommandExecutor = internalExecutorField.GetValue(commandExecutor) :?> ICommandExecutor
+            let internalRemoteUriField = remoteUriFieldFromExecutor internalCommandExecutor
+            (internalCommandExecutor, internalRemoteUriField)
+        else
+            (commandExecutor, remoteUriField)
+
+    
+    if (uriField <> null) then
+        let remoteUri = uriField.GetValue(executor).ToString()
+        let localhostPrefix = "http://localhost"
+        if (remoteUri.StartsWith(localhostPrefix)) then
+            let patchedUri = remoteUri.Replace(localhostPrefix, "http://127.0.0.1")
+            uriField.SetValue(executor, new Uri(patchedUri))
+        else
+            printf "driver uri doesn't contain localhost so not patching : %s" remoteUri
+    else
+        printf "not applying localhost patch, reflection can't find url field"
+    
+    driver
+        
+
+   
+
 (* documented/actions *)
 let start b =
     //for chrome you need to download chromedriver.exe from http://code.google.com/p/chromedriver/wiki/GettingStarted
@@ -846,7 +885,7 @@ let start b =
     //for phantomjs download it and put in c:\ or configure with phantomJSDir
     //for Safari download it and put in c:\ or configure with safariDir
 
-    browser <-
+    let remoteDriver =
         match b with
         | IE -> new IE.InternetExplorerDriver(ieDriverService ()) :> IWebDriver
         | IEWithOptions options -> new IE.InternetExplorerDriver(ieDriverService (), options) :> IWebDriver
@@ -913,6 +952,8 @@ let start b =
             new PhantomJS.PhantomJSDriver(service) :> IWebDriver
         | Remote(url, capabilities) -> new Remote.RemoteWebDriver(new Uri(url), capabilities) :> IWebDriver
 
+    browser <- (patchDriverLocalhost remoteDriver)
+    
     if autoPinBrowserRightOnLaunch = true then pin Right
     browsers <- browsers @ [browser]
 
