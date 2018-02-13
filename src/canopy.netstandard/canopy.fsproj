@@ -23,6 +23,16 @@
     <None Include="..\canopy\companion\companion.fsx" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="4.3.4" />
+    <PackageReference Include="Microsoft.CSharp" Version="4.4.1" />
+    <PackageReference Include="Microsoft.NETCore.Platforms" Version="2.0.1" />
+    <PackageReference Include="Selenium.WebDriver" Version="3.9.1" />
+    <PackageReference Include="System.Security.Cryptography.Algorithms" Version="4.3.1" />
+    <PackageReference Include="System.Security.Cryptography.X509Certificates" Version="4.3.2" />
+    <PackageReference Include="System.Xml.ReaderWriter" Version="4.3.1" />
+  </ItemGroup>
+
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 
 </Project>

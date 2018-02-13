@@ -21,4 +21,8 @@
     <ProjectReference Include="..\..\src\canopy.netstandard\canopy.fsproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="4.3.4" />
+  </ItemGroup>
+
 </Project>
